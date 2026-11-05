@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Publish update</title>
+<style>
+  :root { --bg:#0d0f14; --card:#13161c; --line:#252a36; --text:#e8eaf6; --dim:#8b93a8; --accent:#4fc3f7; --bad:#ef5350; --ok:#66bb6a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: Inter, system-ui, sans-serif; line-height:1.5; }
+  main { max-width: 640px; margin: 0 auto; padding: 48px 16px; }
+  h1 { font-weight: 300; font-size: 32px; margin: 0 0 6px; } h1 b { color: var(--accent); font-weight: 600; }
+  .dim { color: var(--dim); font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 20px; margin: 16px 0; }
+  label { display:block; font-size: 13px; color: var(--dim); margin: 14px 0 4px; }
+  input[type=text], input[type=password], textarea { width:100%; background:#0d0f14; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:10px 12px; font: inherit; }
+  textarea { min-height: 90px; resize: vertical; }
+  #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 28px 12px; text-align: center; color: var(--dim); cursor: pointer; margin-top: 6px; }
+  #drop.over { border-color: var(--accent); color: var(--text); }
+  ul { list-style: none; padding: 0; margin: 10px 0 0; font-size: 14px; } li { padding: 4px 0; display:flex; justify-content: space-between; gap: 12px; }
+  button { background: var(--accent); color:#0d0f14; border:0; border-radius:6px; padding:12px 22px; font: inherit; font-weight:600; cursor:pointer; margin-top: 18px; }
+  button:disabled { background: var(--line); color: var(--dim); cursor: default; }
+  progress { width:100%; height: 10px; margin-top: 12px; }
+  #msg { margin-top: 14px; font-size: 14px; white-space: pre-wrap; }
+  .bad { color: var(--bad); } .ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <h1><b>Quantum</b> release publisher</h1>
+  <p class="dim">Drop the update files here and publish. Quantum OS then offers the update in Settings &rsaquo; Updates.</p>
+
+  <div class="card">
+    <label for="token">GitHub token (kept only in this tab, never saved)</label>
+    <input id="token" type="password" autocomplete="off" placeholder="github_pat_...">
+    <p class="dim">Create one at GitHub &rsaquo; Settings &rsaquo; Developer settings &rsaquo; Fine-grained tokens. Only this repository, permission &ldquo;Contents: Read and write&rdquo;.</p>
+
+    <label for="version">Version (for example 1.2.0)</label>
+    <input id="version" type="text" placeholder="1.2.0">
+
+    <label for="notes">What is new (shown in Settings &rsaquo; Updates)</label>
+    <textarea id="notes" placeholder="Fixed the task manager, new network tab ..."></textarea>
+
+    <label>Files</label>
+    <div id="drop">Drop files here or click to choose<br><span class="dim">quantum-update-X.tar.gz and its .sig, and optionally a .iso</span></div>
+    <input id="files" type="file" multiple hidden>
+    <ul id="list"></ul>
+
+    <button id="go" disabled>Publish</button>
+    <progress id="bar" value="0" max="1" hidden></progress>
+    <div id="msg"></div>
+  </div>
+</main>
+<script>
+const REPO = "yannik-hue/quantum-os";
+const $ = id => document.getElementById(id);
+let files = [];
+
+function say(text, cls) { $("msg").className = cls || ""; $("msg").textContent = text; }
+
+function validate() {
+  const v = $("version").value.trim();
+  const problems = [];
+  if (!/^\d+(\.\d+){1,3}$/.test(v)) problems.push("Version must look like 1.2.0.");
+  const names = files.map(f => f.name);
+  const pkg = names.find(n => /^quantum-update-[0-9][0-9.]*\.tar\.gz$/.test(n));
+  const iso = names.find(n => n.endsWith(".iso"));
+  if (!pkg && !iso) problems.push("Add the update package and its .sig, or an ISO.");
+  if (pkg) {
+    if (!names.includes(pkg + ".sig")) problems.push("The package needs its " + pkg + ".sig file.");
+    if (v && pkg !== "quantum-update-" + v + ".tar.gz") problems.push("The package name must be quantum-update-" + v + ".tar.gz.");
+  }
+  if (!$("token").value.trim()) problems.push("Paste your GitHub token.");
+  return problems;
+}
+
+function refresh() {
+  $("list").innerHTML = "";
+  for (const f of files) {
+    const li = document.createElement("li");
+    li.innerHTML = "<span></span><span class='dim'></span>";
+    li.firstChild.textContent = f.name;
+    li.lastChild.textContent = (f.size / 1048576).toFixed(1) + " MB";
+    $("list").appendChild(li);
+  }
+  const p = validate();
+  $("go").disabled = p.length > 0;
+  say(files.length || $("version").value ? p.join("\n") : "", p.length ? "dim" : "ok");
+}
+
+function addFiles(list) {
+  for (const f of list) if (!files.some(x => x.name === f.name)) files.push(f);
+  refresh();
+}
+$("drop").onclick = () => $("files").click();
+$("files").onchange = e => addFiles(e.target.files);
+$("drop").ondragover = e => { e.preventDefault(); $("drop").classList.add("over"); };
+$("drop").ondragleave = () => $("drop").classList.remove("over");
+$("drop").ondrop = e => { e.preventDefault(); $("drop").classList.remove("over"); addFiles(e.dataTransfer.files); };
+for (const id of ["token", "version", "notes"]) $(id).oninput = refresh;
+
+function api(method, url, token, body) {
+  return fetch(url, {
+    method, body: body ? JSON.stringify(body) : undefined,
+    headers: { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json", "Content-Type": "application/json" }
+  }).then(async r => { if (!r.ok) throw new Error(r.status + " " + (await r.text()).slice(0, 200)); return r.json(); });
+}
+
+function upload(rel, file, token, onProgress) {
+  return new Promise((resolve, reject) => {
+    const url = rel.upload_url.replace(/\{.*$/, "") + "?name=" + encodeURIComponent(file.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Authorization", "Bearer " + token);
+    xhr.setRequestHeader("Accept", "application/vnd.github+json");
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded, e.total);
+    xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error(xhr.status + " " + xhr.responseText.slice(0, 200)));
+    xhr.onerror = () => reject(new Error("network error during upload"));
+    xhr.send(file);
+  });
+}
+
+$("go").onclick = async () => {
+  const token = $("token").value.trim(), ver = $("version").value.trim();
+  $("go").disabled = true; $("bar").hidden = false;
+  try {
+    say("Creating the release as a draft ...");
+    const rel = await api("POST", "https://api.github.com/repos/" + REPO + "/releases", token,
+      { tag_name: "v" + ver, name: (files.some(f => f.name.endsWith(".iso")) ? "Quantum OS " : "Update ") + ver, body: $("notes").value, draft: true });
+    for (const [i, f] of files.entries()) {
+      say("Uploading " + f.name + " (" + (i + 1) + " of " + files.length + ") ...");
+      await upload(rel, f, token, (done, total) => { $("bar").max = total; $("bar").value = done; });
+    }
+    say("Publishing ...");
+    await api("PATCH", "https://api.github.com/repos/" + REPO + "/releases/" + rel.id, token, { draft: false });
+    say("Published version " + ver + ". Quantum OS will offer it now.", "ok");
+  } catch (e) {
+    say("Something went wrong: " + e.message + "\nThe release was left as a draft on GitHub (Releases page). You can finish it there.", "bad");
+  } finally {
+    $("bar").hidden = true; $("go").disabled = false;
+  }
+};
+refresh();
+</script>
+</body>
+</html>
