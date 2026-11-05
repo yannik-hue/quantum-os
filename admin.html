@@ -137,7 +137,12 @@ $("go").onclick = async () => {
     await api("PATCH", "https://api.github.com/repos/" + REPO + "/releases/" + rel.id, token, { draft: false });
     say("Published version " + ver + ". Quantum OS will offer it now.", "ok");
   } catch (e) {
-    say("Something went wrong: " + e.message + "\nThe release was left as a draft on GitHub (Releases page). You can finish it there.", "bad");
+    const link = $("msg");
+    say("The browser could not send the files to GitHub (" + e.message + ").\nThe draft release was created. Open it, drag the files in there and press Publish:\n", "bad");
+    const a = document.createElement("a");
+    a.href = "https://github.com/" + REPO + "/releases"; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open the releases page";
+    a.style.color = "var(--accent)";
+    link.appendChild(a);
   } finally {
     $("bar").hidden = true; $("go").disabled = false;
   }
