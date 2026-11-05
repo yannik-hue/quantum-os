@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantum OS</title>
+<style>
+  :root { --bg:#0d0f14; --card:#13161c; --line:#252a36; --text:#e8eaf6; --dim:#8b93a8; --accent:#4fc3f7; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: Inter, system-ui, sans-serif; line-height:1.55; }
+  main { max-width: 720px; margin: 0 auto; padding: 64px 16px; }
+  h1 { font-size: 44px; font-weight: 300; margin: 0 0 8px; }
+  h1 b { color: var(--accent); font-weight: 600; }
+  p.lead { color: var(--dim); font-size: 18px; margin: 0 0 32px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 14px; letter-spacing: .08em; color: var(--dim); font-weight: 600; text-transform: uppercase; }
+  a.btn { display: inline-block; background: var(--accent); color: #0d0f14; padding: 12px 22px; border-radius: 6px; font-weight: 600; text-decoration: none; }
+  a.btn[aria-disabled="true"] { background: var(--line); color: var(--dim); pointer-events: none; }
+  code { background: #0d0f14; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: 13px; word-break: break-all; }
+  ol { padding-left: 20px; margin: 0; } li { margin: 6px 0; }
+  .dim { color: var(--dim); font-size: 14px; }
+  @media (max-width: 480px) { h1 { font-size: 34px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1><b>Quantum</b> OS</h1>
+  <p class="lead">A clean, fast desktop on Debian. Dark, quick to start, and light enough for an older laptop.</p>
+
+  <section class="card">
+    <h2>Download</h2>
+    <p id="version">Looking for the newest version ...</p>
+    <p><a id="dl" class="btn" href="https://github.com/yannik-hue/quantum-os/releases" aria-disabled="true">Download ISO</a></p>
+    <p class="dim" id="size"></p>
+    <p class="dim">SHA256: <code id="hash">see the release page</code></p>
+  </section>
+
+  <section class="card">
+    <h2>Install in 4 steps</h2>
+    <ol>
+      <li>Download <a href="https://rufus.ie" style="color:var(--accent)">Rufus</a> and write the ISO to a USB stick (8 GB or more). Choose "DD image mode" if Rufus asks.</li>
+      <li>Restart the computer and boot from the stick (Boot Mode: Legacy/CSM, Secure Boot off).</li>
+      <li>Set up your account on first start. Try the live system first.</li>
+      <li>Open <b>Install Quantum OS</b> to install it on the disk. <b>This erases the disk.</b></li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Updates</h2>
+    <p class="dim" style="margin:0">Installed systems update from <b>Settings &rsaquo; Updates</b>. No reinstall needed.</p>
+  </section>
+</main>
+<script>
+(async function () {
+  const repo = "yannik-hue/quantum-os";
+  try {
+    const res = await fetch("https://api.github.com/repos/" + repo + "/releases");
+    if (!res.ok) throw new Error(res.status);
+    const releases = await res.json();
+    const rel = releases.find(r => !r.draft && (r.assets || []).some(a => a.name.endsWith(".iso")));
+    if (!rel) { document.getElementById("version").textContent = "No download has been published yet."; return; }
+    const iso = rel.assets.find(a => a.name.endsWith(".iso"));
+    document.getElementById("version").textContent = "Version " + rel.tag_name.replace(/^v/, "") + " (" + new Date(rel.published_at).toLocaleDateString() + ")";
+    const dl = document.getElementById("dl");
+    dl.href = iso.browser_download_url;
+    dl.removeAttribute("aria-disabled");
+    dl.textContent = "Download " + iso.name;
+    document.getElementById("size").textContent = (iso.size / 1073741824).toFixed(2) + " GB";
+    const m = (rel.body || "").match(/[0-9a-f]{64}/i);
+    if (m) document.getElementById("hash").textContent = m[0];
+  } catch (e) {
+    document.getElementById("version").textContent = "Could not load the download. Open the releases page instead.";
+  }
+})();
+</script>
+</body>
+</html>
